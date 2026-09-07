@@ -12,6 +12,13 @@ import {
   Grievance 
 } from '@/types/cooperative';
 import { calculateFeeSplit } from './fee-calculator';
+import { isFirebaseConfigured } from './firebase';
+import { 
+  subscribeToBookings, 
+  createFirestoreBooking, 
+  updateFirestoreBookingStatus, 
+  seedFirestoreInitialBookingsIfEmpty 
+} from './firestore-bookings';
 
 export interface AppState {
   currentRole: UserRole;
@@ -327,10 +334,63 @@ function notify() {
   listeners.forEach(listener => listener());
 }
 
+let isFirestoreSubscribed = false;
+let firestoreUnsubscribe: (() => void) | null = null;
+
+export function initFirestoreSync() {
+  if (isFirestoreSubscribed || typeof window === 'undefined') return;
+  if (!isFirebaseConfigured()) {
+    return;
+  }
+
+  isFirestoreSubscribed = true;
+
+  // Seed initial booking if collection is empty in Firestore
+  seedFirestoreInitialBookingsIfEmpty(initialBookings).catch((err) => {
+    console.warn('[demoStore] Seed error:', err);
+  });
+
+  // Real-time Firestore synchronization via onSnapshot()
+  // Pushes changes immediately to all connected browser sessions without polling or localStorage
+  firestoreUnsubscribe = subscribeToBookings(
+    (firestoreBookings) => {
+      if (Array.isArray(firestoreBookings)) {
+        state = {
+          ...state,
+          bookings: firestoreBookings
+        };
+        notify();
+      }
+    },
+    (error) => {
+      console.error('[demoStore] Real-time Firestore sync error:', error);
+    }
+  );
+}
+
+// Auto-initialize real-time listener in browser
+if (typeof window !== 'undefined') {
+  initFirestoreSync();
+}
+
 export const demoStore = {
   getState: () => state,
   
+  isFirebaseLive: () => isFirebaseConfigured(),
+
+  setBookingsFromFirestore: (newBookings: Booking[]) => {
+    state = {
+      ...state,
+      bookings: newBookings
+    };
+    notify();
+  },
+
   subscribe: (listener: () => void) => {
+    // Ensure Firestore real-time sync is active
+    if (!isFirestoreSubscribed && typeof window !== 'undefined') {
+      initFirestoreSync();
+    }
     listeners.add(listener);
     return () => {
       listeners.delete(listener);
@@ -386,30 +446,45 @@ export const demoStore = {
       welfareFundAmount: split.welfareFundAmount,
       providerPayoutAmount: split.providerPayoutAmount,
       otpServiceStart: String(Math.floor(1000 + Math.random() * 9000)),
-      specialInstructions: instructions,
+      specialInstructions: instructions || '',
       createdAt: new Date().toISOString()
     };
 
+    // Optimistic local state update for instant UI feedback
     state = {
       ...state,
-      bookings: [newBooking, ...state.bookings]
+      bookings: [newBooking, ...state.bookings.filter(b => b.id !== newBooking.id)]
     };
     notify();
+
+    // Persist to Firestore (will broadcast to other browser sessions via onSnapshot)
+    createFirestoreBooking(newBooking).catch((err) => {
+      console.error('[demoStore] Error saving booking to Firestore:', err);
+    });
+
     return newBooking;
   },
 
   updateBookingStatus: (bookingId: string, newStatus: Booking['status']) => {
+    const completedAt = newStatus === 'completed' ? new Date().toISOString() : undefined;
+    
+    // Optimistic local state update
     state = {
       ...state,
       bookings: state.bookings.map(b => 
         b.id === bookingId ? { 
           ...b, 
           status: newStatus,
-          completedAt: newStatus === 'completed' ? new Date().toISOString() : b.completedAt
+          completedAt: completedAt || b.completedAt
         } : b
       )
     };
     notify();
+
+    // Persist status update to Firestore (will broadcast to other browser sessions via onSnapshot)
+    updateFirestoreBookingStatus(bookingId, newStatus, completedAt ? { completedAt } : {}).catch((err) => {
+      console.error(`[demoStore] Error updating booking ${bookingId} in Firestore:`, err);
+    });
   },
 
   castVote: (proposalId: string, optionId: string) => {

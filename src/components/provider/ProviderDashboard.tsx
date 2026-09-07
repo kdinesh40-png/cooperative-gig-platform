@@ -16,9 +16,12 @@ import {
   Clock, 
   Phone,
   KeyRound,
-  FileBadge
+  FileBadge,
+  Radio,
+  RefreshCw
 } from 'lucide-react';
 import { demoStore } from '@/lib/demo-store';
+import { subscribeToBookings } from '@/lib/firestore-bookings';
 import { formatINR } from '@/lib/fee-calculator';
 import { translations } from '@/lib/i18n';
 
@@ -29,17 +32,44 @@ export default function ProviderDashboard() {
   const [withdrawSuccess, setWithdrawSuccess] = useState(false);
   const [selectedVoteOption, setSelectedVoteOption] = useState<string>('');
   const [voteSubmitted, setVoteSubmitted] = useState(false);
+  const [listenerStatus, setListenerStatus] = useState<'connecting' | 'connected' | 'error'>('connecting');
+  const [listenerError, setListenerError] = useState<string | null>(null);
 
   useEffect(() => {
-    const unsubscribe = demoStore.subscribe(() => {
+    // 1. Subscribe to demoStore for persona, proposals, language updates
+    const storeUnsubscribe = demoStore.subscribe(() => {
       setState(demoStore.getState());
     });
-    return unsubscribe;
+
+    // 2. Direct Firestore onSnapshot() listener mounting on component load
+    // Guarantees real-time reception of new bookings across separate browser windows without polling
+    const firestoreUnsubscribe = subscribeToBookings(
+      (firestoreBookings) => {
+        setListenerStatus('connected');
+        setListenerError(null);
+        demoStore.setBookingsFromFirestore(firestoreBookings);
+      },
+      (error) => {
+        console.error('[ProviderDashboard] Firestore onSnapshot listener error:', error);
+        setListenerStatus('error');
+        setListenerError(error.message || 'Failed to connect to real-time dispatch listener');
+      }
+    );
+
+    return () => {
+      storeUnsubscribe();
+      firestoreUnsubscribe();
+    };
   }, []);
 
   const t = translations[state.language] || translations.en;
   const provider = state.providers.find(p => p.id === 'prov-ramesh') || state.providers[0];
-  const activeJob = state.bookings.find(b => b.status !== 'completed' && b.status !== 'cancelled');
+  // Select active job assigned to Ramesh or open dispatch, chronologically prioritized
+  const activeJob = state.bookings.find(
+    b => (b.providerId === provider.id || !b.providerId) && 
+         b.status !== 'completed' && 
+         b.status !== 'cancelled'
+  );
   const activeProposal = state.proposals[0];
 
   const handleToggleAvailability = () => {
@@ -113,8 +143,28 @@ export default function ProviderDashboard() {
           </div>
         </div>
 
-        {/* Large Availability Switch */}
-        <div className="flex items-center gap-3">
+        {/* Large Availability Switch & Real-time Live Dispatch Status */}
+        <div className="flex flex-wrap items-center gap-3">
+          {listenerStatus === 'connected' ? (
+            <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-emerald-800 bg-emerald-50 border border-emerald-300 px-3 py-1.5 rounded-2xl shadow-sm">
+              <Radio className="w-3.5 h-3.5 animate-pulse text-emerald-600" />
+              <span>Live Dispatch Sync</span>
+            </span>
+          ) : listenerStatus === 'connecting' ? (
+            <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-amber-800 bg-amber-50 border border-amber-300 px-3 py-1.5 rounded-2xl shadow-sm">
+              <RefreshCw className="w-3.5 h-3.5 animate-spin text-amber-600" />
+              <span>Connecting Dispatch...</span>
+            </span>
+          ) : (
+            <span 
+              className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-red-800 bg-red-50 border border-red-300 px-3 py-1.5 rounded-2xl shadow-sm"
+              title={listenerError || 'Firestore listener offline'}
+            >
+              <AlertCircle className="w-3.5 h-3.5 text-red-600" />
+              <span>Dispatch Offline</span>
+            </span>
+          )}
+
           <button
             onClick={handleToggleAvailability}
             className={`px-5 py-3 rounded-2xl font-bold text-xs flex items-center gap-2 shadow-md transition-all ${
@@ -128,6 +178,15 @@ export default function ProviderDashboard() {
           </button>
         </div>
       </header>
+
+      {listenerError && (
+        <div className="bg-red-50 border border-red-300 text-red-800 text-xs p-3.5 rounded-2xl flex items-center justify-between shadow-sm">
+          <div className="flex items-center gap-2">
+            <AlertCircle className="w-4 h-4 text-red-600 shrink-0" />
+            <span>Firestore dispatch listener encountered an error: {listenerError}</span>
+          </div>
+        </div>
+      )}
 
       {/* 2. Real-Time Earnings Ledger Card (Cooperative Economics) */}
       <section className="bg-gradient-to-br from-[#18181B] via-neutral-900 to-[#18181B] text-white rounded-3xl p-6 shadow-xl border border-neutral-800 space-y-4">

@@ -3,18 +3,21 @@
 import React, { useEffect, useState } from 'react';
 import { demoStore } from '@/lib/demo-store';
 import { UserRole, LanguageCode } from '@/types/cooperative';
-import { ShieldCheck, UserCheck, Wrench, Building2, Landmark, Globe } from 'lucide-react';
+import { ShieldCheck, UserCheck, Wrench, Building2, Landmark, Globe, Radio } from 'lucide-react';
 
 export default function DemoRoleSwitcher() {
   const [role, setRole] = useState<UserRole>('customer');
   const [lang, setLang] = useState<LanguageCode>('en');
+  const [isFirebaseLive, setIsFirebaseLive] = useState(false);
 
   useEffect(() => {
     setRole(demoStore.getState().currentRole);
     setLang(demoStore.getState().language);
+    setIsFirebaseLive(demoStore.isFirebaseLive());
     const unsubscribe = demoStore.subscribe(() => {
       setRole(demoStore.getState().currentRole);
       setLang(demoStore.getState().language);
+      setIsFirebaseLive(demoStore.isFirebaseLive());
     });
     return unsubscribe;
   }, []);
@@ -40,9 +43,20 @@ export default function DemoRoleSwitcher() {
           <span className="font-semibold text-neutral-200 hidden sm:inline">
             Sahkar Platform Cooperative
           </span>
-          <span className="text-neutral-400 hidden md:inline">
-            • "Sahkar Se Samriddhi"
-          </span>
+          {isFirebaseLive ? (
+            <span className="hidden md:inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-300 bg-emerald-950/80 border border-emerald-600/50 px-2 py-0.5 rounded-full">
+              <Radio className="w-2.5 h-2.5 animate-pulse text-emerald-400" />
+              <span>Firestore Live Sync</span>
+            </span>
+          ) : (
+            <span 
+              className="hidden md:inline-flex items-center gap-1 text-[10px] font-medium text-amber-300 bg-amber-950/70 border border-amber-600/50 px-2 py-0.5 rounded-full"
+              title="Add Firebase credentials in .env.local to activate real-time multi-browser sync"
+            >
+              <span className="w-1.5 h-1.5 rounded-full bg-amber-400"></span>
+              <span>Local Store (Configure .env.local for Firestore)</span>
+            </span>
+          )}
         </div>
 
         {/* Center: Role Switcher Buttons */}

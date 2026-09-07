@@ -21,6 +21,7 @@ import {
   HeartHandshake
 } from 'lucide-react';
 import { demoStore } from '@/lib/demo-store';
+import { subscribeToBookings } from '@/lib/firestore-bookings';
 import { ServiceCategory, ServiceItem, ProviderProfile, Booking } from '@/types/cooperative';
 import { formatINR, calculateFeeSplit } from '@/lib/fee-calculator';
 import { translations } from '@/lib/i18n';
@@ -38,10 +39,23 @@ export default function CustomerHome() {
   const [showInvoiceModal, setShowInvoiceModal] = useState<Booking | null>(null);
 
   useEffect(() => {
-    const unsubscribe = demoStore.subscribe(() => {
+    const storeUnsubscribe = demoStore.subscribe(() => {
       setState(demoStore.getState());
     });
-    return unsubscribe;
+
+    const firestoreUnsubscribe = subscribeToBookings(
+      (firestoreBookings) => {
+        demoStore.setBookingsFromFirestore(firestoreBookings);
+      },
+      (error) => {
+        console.error('[CustomerHome] Firestore onSnapshot error:', error);
+      }
+    );
+
+    return () => {
+      storeUnsubscribe();
+      firestoreUnsubscribe();
+    };
   }, []);
 
   const t = translations[state.language] || translations.en;
