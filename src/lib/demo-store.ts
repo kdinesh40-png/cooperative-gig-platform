@@ -274,7 +274,7 @@ export const initialBookings: Booking[] = [
     welfareFundAmount: 3.98,
     providerPayoutAmount: 185.07,
     otpServiceStart: '4892',
-    createdAt: new Date().toISOString(),
+    createdAt: '2026-09-07T12:00:00.000Z',
     currentProviderLat: 28.6180,
     currentProviderLng: 27.2850
   }
@@ -336,34 +336,55 @@ function notify() {
 
 let isFirestoreSubscribed = false;
 let firestoreUnsubscribe: (() => void) | null = null;
+let firestoreSyncStatus: 'connecting' | 'connected' | 'error' = 'connecting';
+let firestoreSyncError: string | null = null;
 
 export function initFirestoreSync() {
   if (isFirestoreSubscribed || typeof window === 'undefined') return;
   if (!isFirebaseConfigured()) {
+    firestoreSyncStatus = 'error';
+    firestoreSyncError = 'Firebase project is not configured in environment';
     return;
   }
 
   isFirestoreSubscribed = true;
+  firestoreSyncStatus = 'connecting';
+  firestoreSyncError = null;
 
   // Seed initial booking if collection is empty in Firestore
   seedFirestoreInitialBookingsIfEmpty(initialBookings).catch((err) => {
     console.warn('[demoStore] Seed error:', err);
   });
 
-  // Real-time Firestore synchronization via onSnapshot()
-  // Pushes changes immediately to all connected browser sessions without polling or localStorage
+  // Singleton Real-time Firestore synchronization via onSnapshot()
   firestoreUnsubscribe = subscribeToBookings(
     (firestoreBookings) => {
+      firestoreSyncStatus = 'connected';
+      firestoreSyncError = null;
+
       if (Array.isArray(firestoreBookings)) {
-        state = {
-          ...state,
-          bookings: firestoreBookings
-        };
+        if (firestoreBookings.length === 0) {
+          // If Firestore is empty, preserve initial demo bookings and trigger seed write
+          state = {
+            ...state,
+            bookings: initialBookings
+          };
+          seedFirestoreInitialBookingsIfEmpty(initialBookings).catch(() => {});
+        } else {
+          // Merge or replace with real-time Firestore bookings
+          state = {
+            ...state,
+            bookings: firestoreBookings
+          };
+        }
         notify();
       }
     },
     (error) => {
       console.error('[demoStore] Real-time Firestore sync error:', error);
+      firestoreSyncStatus = 'error';
+      firestoreSyncError = error.message || 'Failed to connect to real-time dispatch listener';
+      notify();
     }
   );
 }
@@ -378,11 +399,31 @@ export const demoStore = {
   
   isFirebaseLive: () => isFirebaseConfigured(),
 
+  getSyncStatus: () => ({
+    status: firestoreSyncStatus,
+    error: firestoreSyncError
+  }),
+
+  unsubscribeFirestore: () => {
+    if (firestoreUnsubscribe) {
+      firestoreUnsubscribe();
+      firestoreUnsubscribe = null;
+      isFirestoreSubscribed = false;
+    }
+  },
+
   setBookingsFromFirestore: (newBookings: Booking[]) => {
-    state = {
-      ...state,
-      bookings: newBookings
-    };
+    if (Array.isArray(newBookings) && newBookings.length > 0) {
+      state = {
+        ...state,
+        bookings: newBookings
+      };
+    } else if (Array.isArray(newBookings) && newBookings.length === 0 && state.bookings.length === 0) {
+      state = {
+        ...state,
+        bookings: initialBookings
+      };
+    }
     notify();
   },
 
@@ -436,7 +477,7 @@ export const demoStore = {
       providerPhone: matchedProvider.phone,
       serviceId: service.id,
       serviceName: service.nameEn,
-      categorySlug: 'electrical',
+      categorySlug: service.slug || 'electrical',
       scheduledAt: 'Today, Within 45 mins',
       status: 'assigned',
       grossAmount: split.grossAmount,

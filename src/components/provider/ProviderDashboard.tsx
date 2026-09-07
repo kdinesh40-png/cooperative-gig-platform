@@ -2,26 +2,21 @@
 
 import React, { useState, useEffect } from 'react';
 import { 
-  Wrench, 
   ShieldCheck, 
   Power, 
   Wallet, 
-  TrendingUp, 
   ArrowDownToLine, 
   Vote, 
-  FileCheck2, 
   CheckCircle, 
   AlertCircle, 
   MapPin, 
-  Clock, 
-  Phone,
   KeyRound,
   FileBadge,
   Radio,
   RefreshCw
 } from 'lucide-react';
 import { demoStore } from '@/lib/demo-store';
-import { subscribeToBookings } from '@/lib/firestore-bookings';
+import { BookingStatus } from '@/types/cooperative';
 import { formatINR } from '@/lib/fee-calculator';
 import { translations } from '@/lib/i18n';
 
@@ -32,33 +27,21 @@ export default function ProviderDashboard() {
   const [withdrawSuccess, setWithdrawSuccess] = useState(false);
   const [selectedVoteOption, setSelectedVoteOption] = useState<string>('');
   const [voteSubmitted, setVoteSubmitted] = useState(false);
-  const [listenerStatus, setListenerStatus] = useState<'connecting' | 'connected' | 'error'>('connecting');
-  const [listenerError, setListenerError] = useState<string | null>(null);
+  const initialSync = demoStore.getSyncStatus();
+  const [listenerStatus, setListenerStatus] = useState<'connecting' | 'connected' | 'error'>(initialSync.status);
+  const [listenerError, setListenerError] = useState<string | null>(initialSync.error);
 
   useEffect(() => {
-    // 1. Subscribe to demoStore for persona, proposals, language updates
+    // Subscribe to centralized demoStore which coordinates real-time Firestore sync
     const storeUnsubscribe = demoStore.subscribe(() => {
       setState(demoStore.getState());
+      const syncInfo = demoStore.getSyncStatus();
+      setListenerStatus(syncInfo.status);
+      setListenerError(syncInfo.error);
     });
-
-    // 2. Direct Firestore onSnapshot() listener mounting on component load
-    // Guarantees real-time reception of new bookings across separate browser windows without polling
-    const firestoreUnsubscribe = subscribeToBookings(
-      (firestoreBookings) => {
-        setListenerStatus('connected');
-        setListenerError(null);
-        demoStore.setBookingsFromFirestore(firestoreBookings);
-      },
-      (error) => {
-        console.error('[ProviderDashboard] Firestore onSnapshot listener error:', error);
-        setListenerStatus('error');
-        setListenerError(error.message || 'Failed to connect to real-time dispatch listener');
-      }
-    );
 
     return () => {
       storeUnsubscribe();
-      firestoreUnsubscribe();
     };
   }, []);
 
@@ -76,7 +59,7 @@ export default function ProviderDashboard() {
     demoStore.toggleProviderAvailability(provider.id);
   };
 
-  const handleStatusTransition = (newStatus: any) => {
+  const handleStatusTransition = (newStatus: BookingStatus) => {
     if (!activeJob) return;
     demoStore.updateBookingStatus(activeJob.id, newStatus);
   };

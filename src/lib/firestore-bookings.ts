@@ -16,7 +16,7 @@ const BOOKINGS_COLLECTION = 'bookings';
  * Recursively strips undefined values so Firestore setDoc / updateDoc never crashes.
  * Firestore throws: "Function setDoc() called with invalid data. Unsupported field value: undefined".
  */
-export function sanitizeForFirestore(obj: any): any {
+export function sanitizeForFirestore(obj: unknown): unknown {
   if (obj === null || obj === undefined) {
     return null;
   }
@@ -26,7 +26,7 @@ export function sanitizeForFirestore(obj: any): any {
   if (Array.isArray(obj)) {
     return obj.map(sanitizeForFirestore);
   }
-  const clean: Record<string, any> = {};
+  const clean: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(obj)) {
     if (value !== undefined) {
       clean[key] = sanitizeForFirestore(value);
@@ -46,6 +46,7 @@ export function subscribeToBookings(
 ): Unsubscribe {
   const database = getFirebaseDb();
   if (!isFirebaseConfigured() || !database) {
+    if (onError) onError(new Error('Firebase is not configured or database is unavailable'));
     return () => {};
   }
 
@@ -65,8 +66,8 @@ export function subscribeToBookings(
 
         // Chronologically sort descending by createdAt
         bookings.sort((a, b) => {
-          const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
-          const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+          const timeA = a.createdAt ? new Date(a.createdAt).getTime() || 0 : 0;
+          const timeB = b.createdAt ? new Date(b.createdAt).getTime() || 0 : 0;
           return timeB - timeA;
         });
 
@@ -79,9 +80,9 @@ export function subscribeToBookings(
     );
 
     return unsubscribe;
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('[Firestore] Failed to attach onSnapshot listener:', error);
-    if (onError) onError(error);
+    if (onError && error instanceof Error) onError(error);
     return () => {};
   }
 }
@@ -117,7 +118,7 @@ export async function createFirestoreBooking(booking: Booking): Promise<void> {
 
   try {
     const bookingDocRef = doc(database, BOOKINGS_COLLECTION, booking.id);
-    const payload = sanitizeForFirestore(booking);
+    const payload = sanitizeForFirestore(booking) as Record<string, unknown>;
     await setDoc(bookingDocRef, payload);
     console.log(`[Firestore] Successfully created booking ${booking.id}`);
   } catch (error) {
@@ -143,14 +144,14 @@ export async function updateFirestoreBookingStatus(
 
   try {
     const bookingDocRef = doc(database, BOOKINGS_COLLECTION, bookingId);
-    const updatePayload: Record<string, any> = {
+    const updatePayload: Record<string, unknown> = {
       status,
       ...extraFields
     };
     if (status === 'completed' && !extraFields.completedAt) {
       updatePayload.completedAt = new Date().toISOString();
     }
-    const sanitized = sanitizeForFirestore(updatePayload);
+    const sanitized = sanitizeForFirestore(updatePayload) as Record<string, unknown>;
     await updateDoc(bookingDocRef, sanitized);
     console.log(`[Firestore] Successfully updated booking ${bookingId} to ${status}`);
   } catch (error) {
@@ -175,7 +176,7 @@ export async function seedFirestoreInitialBookingsIfEmpty(seedData: Booking[]): 
     if (existingSnap.empty && seedData.length > 0) {
       for (const booking of seedData) {
         const docRef = doc(database, BOOKINGS_COLLECTION, booking.id);
-        await setDoc(docRef, sanitizeForFirestore(booking));
+        await setDoc(docRef, sanitizeForFirestore(booking) as Record<string, unknown>);
       }
       console.log('[Firestore] Seeded initial demo booking into Firestore.');
     }
