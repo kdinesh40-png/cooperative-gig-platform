@@ -14,22 +14,43 @@ import {
   Cpu, 
   Hammer, 
   CheckCircle2, 
-  Phone, 
   AlertTriangle,
   ChevronRight,
   Receipt,
   HeartHandshake
 } from 'lucide-react';
 import { demoStore } from '@/lib/demo-store';
-import { ServiceCategory, ServiceItem, ProviderProfile, Booking } from '@/types/cooperative';
+import { useAuth } from '@/context/AuthContext';
+import { ServiceItem, Booking } from '@/types/cooperative';
 import { formatINR, calculateFeeSplit } from '@/lib/fee-calculator';
 import { translations } from '@/lib/i18n';
 import LeafletMap from '@/components/maps/LeafletMap';
 import SOSModal from '@/components/common/SOSModal';
 
 export default function CustomerHome() {
+  const { profile } = useAuth();
   const [state, setState] = useState(demoStore.getState());
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
+
+// Helper to determine which booking should be displayed on the Customer dashboard
+function getDisplayBooking(bookings: Booking[]): Booking | null {
+  // 1️⃣ Any in‑flight job (not completed / not cancelled)
+  const inFlight = bookings.find(
+    b => b.status !== 'completed' && b.status !== 'cancelled'
+  );
+  if (inFlight) return inFlight;
+
+  // 2️⃣ No in‑flight – pick the latest COMPLETED booking
+  const completed = bookings
+    .filter(b => b.status === 'completed')
+    .sort(
+      (a, b) =>
+        (new Date(b.completedAt ?? b.createdAt).getTime()) -
+        (new Date(a.completedAt ?? a.createdAt).getTime())
+    )[0];
+
+  return completed ?? null;
+}
   const [searchQuery, setSearchQuery] = useState('');
   const [bookingModalService, setBookingModalService] = useState<ServiceItem | null>(null);
   const [bookingAddress, setBookingAddress] = useState('Flat 402, Block C, Mayur Vihar Phase 1, New Delhi 110091');
@@ -50,25 +71,36 @@ export default function CustomerHome() {
   const t = translations[state.language] || translations.en;
 
   // Active in-flight booking (for tracker)
-  const activeBooking = state.bookings.find(b => b.status !== 'completed' && b.status !== 'cancelled') || state.bookings[0];
+  const activeBooking = getDisplayBooking(state.bookings);
+
+  // Auto-open invoice modal for completed bookings is handled via derived state below – no effect needed
+  // Derived invoice booking: either manually opened or auto for completed
+  const invoiceBooking = showInvoiceModal ?? (activeBooking?.status === 'completed' ? activeBooking : null);
 
   // Filtered services
   const filteredServices = state.services.filter(s => {
-    const matchesCat = selectedCategory === 'all' || 
+    const matchesCat =
+      selectedCategory === 'all' ||
       (selectedCategory === 'electrical' && s.categoryId === 'cat-1') ||
       (selectedCategory === 'plumbing' && s.categoryId === 'cat-2') ||
       (selectedCategory === 'cleaning' && s.categoryId === 'cat-3') ||
       (selectedCategory === 'appliances' && s.categoryId === 'cat-4') ||
       (selectedCategory === 'carpentry' && s.categoryId === 'cat-5');
-    
-    const matchesQuery = s.nameEn.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                         s.description.toLowerCase().includes(searchQuery.toLowerCase());
+
+    const matchesQuery =
+      s.nameEn.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      s.description.toLowerCase().includes(searchQuery.toLowerCase());
+
     return matchesCat && matchesQuery;
   });
 
   const handleConfirmBooking = () => {
     if (!bookingModalService) return;
-    demoStore.bookService(bookingModalService, bookingAddress);
+    demoStore.bookService(bookingModalService, bookingAddress, undefined, {
+      customerId: profile?.uid,
+      customerName: profile?.fullName,
+      customerPhone: profile?.phone
+    });
     setIsBookingSuccess(true);
     setTimeout(() => {
       setIsBookingSuccess(false);
@@ -87,6 +119,9 @@ export default function CustomerHome() {
     }
   };
 
+  const displayName = profile?.fullName || 'Priya Sharma';
+  const initials = displayName.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase() || 'PS';
+
   return (
     <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6 space-y-7 pb-28">
       
@@ -98,7 +133,7 @@ export default function CustomerHome() {
             <span>{t.currentLocation}</span>
           </div>
           <h1 className="text-2xl sm:text-3xl font-extrabold text-neutral-900 tracking-tight mt-0.5">
-            {t.welcomeGreeting}, Priya
+            {t.welcomeGreeting}, {displayName.split(' ')[0]}
           </h1>
         </div>
 
@@ -110,7 +145,7 @@ export default function CustomerHome() {
             <span className="absolute top-1 right-1 w-2.5 h-2.5 bg-[#D97706] rounded-full ring-2 ring-white" />
           </div>
           <div className="w-10 h-10 rounded-full bg-neutral-900 text-white flex items-center justify-center font-bold text-sm shadow-md border-2 border-white">
-            PS
+            {initials}
           </div>
         </div>
       </header>
@@ -255,6 +290,13 @@ export default function CustomerHome() {
                 : 'bg-neutral-50 text-neutral-400'
             }`}>
               In Progress
+            </div>
+            <div className={`p-2 rounded-xl font-bold ${
+              activeBooking.status === 'completed'
+                ? 'bg-emerald-50 text-[#0D5C3A] border border-emerald-200'
+                : 'bg-neutral-50 text-neutral-400'
+            }`}>
+              Completed
             </div>
           </div>
 
@@ -410,7 +452,7 @@ export default function CustomerHome() {
               </div>
 
               <p className="text-xs text-neutral-600 line-clamp-2 italic">
-                "{provider.bio}"
+                &quot;{provider.bio}&quot;
               </p>
 
               <div className="pt-2 border-t border-neutral-100 flex items-center justify-between text-xs">
@@ -509,13 +551,13 @@ export default function CustomerHome() {
       )}
 
       {/* 9. Digital Invoice Modal */}
-      {showInvoiceModal && (
+      {invoiceBooking && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
           <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-neutral-200 text-neutral-900 space-y-4">
             <div className="flex items-center justify-between border-b border-neutral-200 pb-3">
               <div>
                 <h3 className="font-bold text-neutral-900 text-base">Digital Tax Invoice</h3>
-                <span className="text-xs text-neutral-500">Ref: {showInvoiceModal.bookingReference}</span>
+                <span className="text-xs text-neutral-500">Ref: {invoiceBooking.bookingReference}</span>
               </div>
               <button 
                 onClick={() => setShowInvoiceModal(null)}
@@ -532,38 +574,38 @@ export default function CustomerHome() {
               </div>
               <div className="flex justify-between">
                 <span>Customer:</span>
-                <span>{showInvoiceModal.customerName}</span>
+                <span>{invoiceBooking.customerName}</span>
               </div>
               <div className="flex justify-between">
                 <span>Service:</span>
-                <span>{showInvoiceModal.serviceName}</span>
+                <span>{invoiceBooking.serviceName}</span>
               </div>
               <div className="flex justify-between">
                 <span>Provider:</span>
-                <span>{showInvoiceModal.providerName}</span>
+                <span>{invoiceBooking.providerName}</span>
               </div>
               <div className="border-t border-dashed border-neutral-300 my-2 pt-2 space-y-1">
                 <div className="flex justify-between">
                   <span>Gross Job Fee:</span>
-                  <span>{formatINR(showInvoiceModal.grossAmount)}</span>
+                  <span>{formatINR(invoiceBooking.grossAmount)}</span>
                 </div>
                 <div className="flex justify-between text-neutral-500">
                   <span>Co-op Service Maintenance (5%):</span>
-                  <span>{formatINR(showInvoiceModal.cooperativeFeeAmount)}</span>
+                  <span>{formatINR(invoiceBooking.cooperativeFeeAmount)}</span>
                 </div>
                 <div className="flex justify-between text-neutral-500">
                   <span>Worker Welfare & Medical Pool (2%):</span>
-                  <span>{formatINR(showInvoiceModal.welfareFundAmount)}</span>
+                  <span>{formatINR(invoiceBooking.welfareFundAmount)}</span>
                 </div>
                 <div className="flex justify-between font-bold text-neutral-900 pt-1 border-t border-neutral-200">
                   <span>Total Amount Paid:</span>
-                  <span>{formatINR(showInvoiceModal.grossAmount)}</span>
+                  <span>{formatINR(invoiceBooking.grossAmount)}</span>
                 </div>
               </div>
             </div>
 
             <button
-              onClick={() => setShowInvoiceModal(null)}
+              onClick={() => { setShowInvoiceModal(null); } }
               className="w-full bg-[#18181B] text-white py-2.5 rounded-xl font-semibold text-xs hover:bg-neutral-800"
             >
               Close Invoice

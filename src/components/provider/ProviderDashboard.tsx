@@ -16,11 +16,13 @@ import {
   RefreshCw
 } from 'lucide-react';
 import { demoStore } from '@/lib/demo-store';
+import { useAuth } from '@/context/AuthContext';
 import { BookingStatus } from '@/types/cooperative';
 import { formatINR } from '@/lib/fee-calculator';
 import { translations } from '@/lib/i18n';
 
 export default function ProviderDashboard() {
+  const { profile } = useAuth();
   const [state, setState] = useState(demoStore.getState());
   const [enteredOtp, setEnteredOtp] = useState('');
   const [otpError, setOtpError] = useState('');
@@ -46,17 +48,21 @@ export default function ProviderDashboard() {
   }, []);
 
   const t = translations[state.language] || translations.en;
-  const provider = state.providers.find(p => p.id === 'prov-ramesh') || state.providers[0];
-  // Select active job assigned to Ramesh or open dispatch, chronologically prioritized
+  const defaultProvider = state.providers.find(p => p.id === 'prov-ramesh') || state.providers[0];
+  const provider = defaultProvider;
+  const providerName = profile?.fullName || defaultProvider.fullName;
+  const providerInitials = providerName.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase() || 'RK';
+
+  // Select active job (assigned to this provider or unassigned open booking)
   const activeJob = state.bookings.find(
-    b => (b.providerId === provider.id || !b.providerId) && 
+    b => (b.providerId === defaultProvider.id || b.providerId === profile?.uid || !b.providerId || b.customerId) && 
          b.status !== 'completed' && 
          b.status !== 'cancelled'
-  );
+  ) || state.bookings[0];
   const activeProposal = state.proposals[0];
 
   const handleToggleAvailability = () => {
-    demoStore.toggleProviderAvailability(provider.id);
+    demoStore.toggleProviderAvailability(defaultProvider.id);
   };
 
   const handleStatusTransition = (newStatus: BookingStatus) => {
@@ -97,12 +103,12 @@ export default function ProviderDashboard() {
       <header className="flex flex-wrap items-center justify-between gap-4 bg-white rounded-3xl p-6 shadow-sm border border-neutral-200">
         <div className="flex items-center gap-4">
           <div className="w-16 h-16 rounded-2xl bg-[#D97706] text-white flex items-center justify-center font-extrabold text-xl shadow-md">
-            RK
+            {providerInitials}
           </div>
           <div>
             <div className="flex items-center gap-2">
               <h1 className="text-xl sm:text-2xl font-black text-neutral-900">
-                {provider.fullName}
+                {providerName}
               </h1>
               <span className="bg-emerald-50 text-[#0D5C3A] text-xs font-bold px-2.5 py-0.5 rounded-full border border-emerald-200 flex items-center gap-1">
                 <ShieldCheck className="w-3.5 h-3.5" />

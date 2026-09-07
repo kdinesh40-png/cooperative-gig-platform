@@ -1,0 +1,35 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // User profile documents
+    match /users/{userId} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null && request.auth.uid == userId;
+      allow update: if request.auth != null && request.auth.uid == userId;
+      allow delete: if false; // User document deletion disabled
+    }
+
+    // Provider profiles
+    match /providers/{providerId} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null && (
+        request.auth.uid == providerId ||
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'coop_admin'
+      );
+    }
+
+    // Bookings collection: authenticated users can read and manage bookings
+    match /bookings/{bookingId} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null;
+      allow update: if request.auth != null && (
+        resource.data.customerId == request.auth.uid ||
+        resource.data.providerId == request.auth.uid ||
+        resource.data.providerId == null ||
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'coop_admin'
+      );
+      allow delete: if false;
+    }
+  }
+}

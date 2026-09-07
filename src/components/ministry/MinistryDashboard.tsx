@@ -26,7 +26,7 @@ export default function MinistryDashboard() {
                 Ministry of Cooperation & NCDC Oversight
               </h1>
               <span className="bg-purple-50 text-purple-700 text-xs font-bold px-2.5 py-0.5 rounded-full border border-purple-200">
-                "Sahkar Se Samriddhi"
+                &quot;Sahkar Se Samriddhi&quot;
               </span>
             </div>
             <p className="text-xs text-neutral-500 mt-0.5">
@@ -115,7 +115,7 @@ export default function MinistryDashboard() {
       {/* 4. Policy Comparison: Sahkar Model vs Corporate Aggregator Giants */}
       <section className="bg-neutral-900 text-white rounded-3xl p-6 shadow-xl border border-neutral-800 space-y-4">
         <h2 className="text-base font-bold text-neutral-100">
-          Policy Evaluation: Cooperative Platform ("Sahkar") vs. Investor Aggregator (Urban Company)
+          Policy Evaluation: Cooperative Platform (&quot;Sahkar&quot;) vs. Investor Aggregator (Urban Company)
         </h2>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
@@ -127,7 +127,7 @@ export default function MinistryDashboard() {
               <li>❌ <strong>20%–30% Commission:</strong> High fee extracted for investor margins</li>
               <li>❌ <strong>Zero Worker Voice:</strong> Algorithmic de-platforming & unilateral price cuts</li>
               <li>❌ <strong>Surge Pricing:</strong> Opaque prices fluctuating 2x–3x during monsoons & heatwaves</li>
-              <li>❌ <strong>Informal Exploitation:</strong> Workers classified as "gig partners" with no welfare rights</li>
+              <li>❌ <strong>Informal Exploitation:</strong> Workers classified as &quot;gig partners&quot; with no welfare rights</li>
             </ul>
           </div>
 

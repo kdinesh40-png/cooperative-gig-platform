@@ -458,7 +458,12 @@ export const demoStore = {
     notify();
   },
 
-  bookService: (service: ServiceItem, address: string, instructions?: string) => {
+  bookService: (
+    service: ServiceItem, 
+    address: string, 
+    instructions?: string,
+    customerProfile?: { customerId?: string; customerName?: string; customerPhone?: string }
+  ) => {
     const split = calculateFeeSplit(service.basePrice, state.cooperativeFeePercent, state.welfareFundPercent);
     const matchedProvider = state.providers.find(p => p.isAvailable && p.verificationStatus === 'approved') || state.providers[0];
     
@@ -466,9 +471,9 @@ export const demoStore = {
       id: `book-${Date.now()}`,
       bookingReference: `COOP-2026-DEL-${Math.floor(1000 + Math.random() * 9000)}`,
       cooperativeId: 'coop-delhi',
-      customerId: 'cust-priya',
-      customerName: 'Priya Sharma',
-      customerPhone: '+91 98765 43210',
+      customerId: customerProfile?.customerId || 'cust-priya',
+      customerName: customerProfile?.customerName || 'Priya Sharma',
+      customerPhone: customerProfile?.customerPhone || '+91 98765 43210',
       customerAddress: address || 'Flat 402, Block C, Mayur Vihar, New Delhi',
       customerLat: 28.6080,
       customerLng: 77.2980,

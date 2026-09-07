@@ -3,19 +3,26 @@
 import React, { useEffect, useState } from 'react';
 import { Home, Calendar, Plus, User, FileText, Vote, ShieldCheck, Wrench, Building2, Landmark } from 'lucide-react';
 import { demoStore } from '@/lib/demo-store';
+import { useAuth } from '@/context/AuthContext';
 import { UserRole } from '@/types/cooperative';
 
 export default function FloatingBottomNav() {
+  const { user, profile } = useAuth();
   const [role, setRole] = useState<UserRole>('customer');
   const [activeTab, setActiveTab] = useState('home');
 
   useEffect(() => {
-    setRole(demoStore.getState().currentRole);
+    queueMicrotask(() => {
+      const currentRole = profile?.role || demoStore.getState().currentRole;
+      setRole(currentRole);
+    });
     const unsubscribe = demoStore.subscribe(() => {
-      setRole(demoStore.getState().currentRole);
+      setRole(profile?.role || demoStore.getState().currentRole);
     });
     return unsubscribe;
-  }, []);
+  }, [profile]);
+
+  if (!user) return null;
 
   return (
     <nav 

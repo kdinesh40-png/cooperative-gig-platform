@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 import DemoRoleSwitcher from "@/components/layout/DemoRoleSwitcher";
 import FloatingBottomNav from "@/components/layout/FloatingBottomNav";
+import { AuthProvider } from "@/context/AuthContext";
 
 export const metadata: Metadata = {
   title: "Sahkar — Cooperative Gig Services Platform | SIH26089",
@@ -16,11 +17,13 @@ export default function RootLayout({
   return (
     <html lang="en" className="h-full antialiased">
       <body className="min-h-full flex flex-col bg-[#F8F6F0] text-[#18181B]">
-        <DemoRoleSwitcher />
-        <main className="flex-1 w-full">
-          {children}
-        </main>
-        <FloatingBottomNav />
+        <AuthProvider>
+          <DemoRoleSwitcher />
+          <main className="flex-1 w-full">
+            {children}
+          </main>
+          <FloatingBottomNav />
+        </AuthProvider>
       </body>
     </html>
   );

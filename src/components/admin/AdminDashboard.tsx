@@ -300,7 +300,7 @@ export default function AdminDashboard() {
                 <span className="text-xs font-bold text-neutral-900 block">
                   Ticket #{activeGrievance.ticketReference} — {activeGrievance.customerName} vs. {activeGrievance.providerName}
                 </span>
-                <p className="text-xs text-neutral-600 mt-1">"{activeGrievance.description}"</p>
+                <p className="text-xs text-neutral-600 mt-1">&quot;{activeGrievance.description}&quot;</p>
               </div>
               <div className="text-right">
                 <span className="text-[11px] font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-md border border-amber-200 flex items-center gap-1">

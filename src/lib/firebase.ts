@@ -1,5 +1,6 @@
 import { initializeApp, getApps, getApp, type FirebaseApp } from 'firebase/app';
 import { getFirestore, type Firestore } from 'firebase/firestore';
+import { getAuth, type Auth } from 'firebase/auth';
 
 const DEFAULT_PROJECT_ID = 'cooperative-gig-platform-61581';
 const DEFAULT_API_KEY = 'AIzaSyCooperativeGigPlatformKey2026';
@@ -24,25 +25,52 @@ export function isFirebaseConfigured(): boolean {
 
 let app: FirebaseApp | null = null;
 let db: Firestore | null = null;
+let auth: Auth | null = null;
+
+export function getFirebaseApp(): FirebaseApp | null {
+  if (app) return app;
+  if (!isFirebaseConfigured()) return null;
+  try {
+    app = getApps().length ? getApp() : initializeApp(firebaseConfig);
+    return app;
+  } catch (error) {
+    console.error('[Firebase] Failed to initialize App:', error);
+    return null;
+  }
+}
 
 export function getFirebaseDb(): Firestore | null {
   if (db) return db;
-  if (!isFirebaseConfigured()) return null;
-
+  const currentApp = getFirebaseApp();
+  if (!currentApp) return null;
   try {
-    app = getApps().length ? getApp() : initializeApp(firebaseConfig);
-    db = getFirestore(app);
+    db = getFirestore(currentApp);
     return db;
   } catch (error) {
-    console.error('[Firebase] Failed to initialize Firebase:', error);
+    console.error('[Firebase] Failed to initialize Firestore:', error);
+    return null;
+  }
+}
+
+export function getFirebaseAuth(): Auth | null {
+  if (auth) return auth;
+  const currentApp = getFirebaseApp();
+  if (!currentApp) return null;
+  try {
+    auth = getAuth(currentApp);
+    return auth;
+  } catch (error) {
+    console.error('[Firebase] Failed to initialize Auth:', error);
     return null;
   }
 }
 
 // Eager initialization if configured
 if (typeof window !== 'undefined' || isFirebaseConfigured()) {
+  getFirebaseApp();
   getFirebaseDb();
+  getFirebaseAuth();
 }
 
-export { app, db };
+export { app, db, auth };
 
