@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { UserRole } from '@/types/cooperative';
-import { ShieldCheck, LogIn, UserPlus, AlertCircle, Wrench, UserCheck, Lock, Mail, Phone, User as UserIcon, Loader2 } from 'lucide-react';
+import { ShieldCheck, LogIn, UserPlus, AlertCircle, Wrench, UserCheck, Lock, Mail, Phone, User as UserIcon, Loader2, Building2, Landmark } from 'lucide-react';
 
 export default function AuthForm() {
   const { login, signup, error, clearError } = useAuth();
@@ -69,6 +69,24 @@ export default function AuthForm() {
     setFormError(null);
   };
 
+  const fillDemoAdmin = () => {
+    setMode('login');
+    setEmail('admin@sahkar.gov.in');
+    setPassword('sahkar123');
+    setFullName('V. K. Sharma');
+    setRole('coop_admin');
+    setFormError(null);
+  };
+
+  const fillDemoMinistry = () => {
+    setMode('login');
+    setEmail('oversight@cooperation.gov.in');
+    setPassword('sahkar123');
+    setFullName('Dr. Anand Verma');
+    setRole('ministry_admin');
+    setFormError(null);
+  };
+
   return (
     <div className="min-h-[80vh] flex items-center justify-center px-4 py-8">
       <div className="w-full max-w-md bg-white rounded-3xl p-6 sm:p-8 shadow-xl border border-neutral-200 space-y-6">
@@ -85,7 +103,7 @@ export default function AuthForm() {
           <p className="text-xs sm:text-sm text-neutral-600">
             {mode === 'login' 
               ? 'Sign in to access your Sahkar member account' 
-              : 'Register as a Customer or Worker Owner ("Sevak Hi Malik")'}
+              : 'Register as a Customer, Worker, Admin or Ministry Observer'}
           </p>
         </div>
 
@@ -141,6 +159,24 @@ export default function AuthForm() {
               <Wrench className="w-3.5 h-3.5 text-amber-600 shrink-0" />
               <span className="truncate">Worker (Ramesh)</span>
             </button>
+
+            <button
+              type="button"
+              onClick={fillDemoAdmin}
+              className="px-2.5 py-1.5 bg-white border border-blue-300 rounded-xl text-[11px] font-semibold text-blue-800 hover:bg-blue-50 transition-all text-left flex items-center gap-1"
+            >
+              <Building2 className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+              <span className="truncate">Co-op Admin</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={fillDemoMinistry}
+              className="px-2.5 py-1.5 bg-white border border-purple-300 rounded-xl text-[11px] font-semibold text-purple-800 hover:bg-purple-50 transition-all text-left flex items-center gap-1"
+            >
+              <Landmark className="w-3.5 h-3.5 text-purple-600 shrink-0" />
+              <span className="truncate">Ministry / NCDC</span>
+            </button>
           </div>
         </div>
 
@@ -163,27 +199,53 @@ export default function AuthForm() {
                 <button
                   type="button"
                   onClick={() => setRole('customer')}
-                  className={`p-3 rounded-2xl border text-xs font-semibold flex flex-col items-center gap-1 transition-all ${
+                  className={`p-2.5 rounded-2xl border text-xs font-semibold flex flex-col items-center gap-1 transition-all ${
                     role === 'customer'
                       ? 'border-[#0D5C3A] bg-emerald-50 text-[#0D5C3A] ring-1 ring-[#0D5C3A]'
                       : 'border-neutral-200 text-neutral-600 hover:bg-neutral-50'
                   }`}
                 >
-                  <UserCheck className="w-5 h-5 text-[#0D5C3A]" />
+                  <UserCheck className="w-4 h-4 text-[#0D5C3A]" />
                   <span>Customer</span>
                 </button>
 
                 <button
                   type="button"
                   onClick={() => setRole('provider')}
-                  className={`p-3 rounded-2xl border text-xs font-semibold flex flex-col items-center gap-1 transition-all ${
+                  className={`p-2.5 rounded-2xl border text-xs font-semibold flex flex-col items-center gap-1 transition-all ${
                     role === 'provider'
                       ? 'border-amber-600 bg-amber-50 text-amber-800 ring-1 ring-amber-600'
                       : 'border-neutral-200 text-neutral-600 hover:bg-neutral-50'
                   }`}
                 >
-                  <Wrench className="w-5 h-5 text-amber-600" />
-                  <span>Worker / Technician</span>
+                  <Wrench className="w-4 h-4 text-amber-600" />
+                  <span>Worker</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setRole('coop_admin')}
+                  className={`p-2.5 rounded-2xl border text-xs font-semibold flex flex-col items-center gap-1 transition-all ${
+                    role === 'coop_admin'
+                      ? 'border-blue-600 bg-blue-50 text-blue-800 ring-1 ring-blue-600'
+                      : 'border-neutral-200 text-neutral-600 hover:bg-neutral-50'
+                  }`}
+                >
+                  <Building2 className="w-4 h-4 text-blue-600" />
+                  <span>Co-op Admin</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setRole('ministry_admin')}
+                  className={`p-2.5 rounded-2xl border text-xs font-semibold flex flex-col items-center gap-1 transition-all ${
+                    role === 'ministry_admin'
+                      ? 'border-purple-600 bg-purple-50 text-purple-800 ring-1 ring-purple-600'
+                      : 'border-neutral-200 text-neutral-600 hover:bg-neutral-50'
+                  }`}
+                >
+                  <Landmark className="w-4 h-4 text-purple-600" />
+                  <span>Ministry</span>
                 </button>
               </div>
             </div>

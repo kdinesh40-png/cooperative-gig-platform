@@ -33,23 +33,39 @@ export default function CustomerHome() {
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
 
 // Helper to determine which booking should be displayed on the Customer dashboard
-function getDisplayBooking(bookings: Booking[]): Booking | null {
-  // 1️⃣ Any in‑flight job (not completed / not cancelled)
-  const inFlight = bookings.find(
-    b => b.status !== 'completed' && b.status !== 'cancelled'
-  );
-  if (inFlight) return inFlight;
+function getDisplayBooking(bookings: Booking[], customerId: string): Booking | null {
+  // 1️⃣ Filter bookings belonging to the current customer
+  const userBookings = bookings.filter(b => b.customerId === customerId);
+  if (userBookings.length === 0) return null;
 
-  // 2️⃣ No in‑flight – pick the latest COMPLETED booking
-  const completed = bookings
+  // 2️⃣ Get latest in-flight booking for this customer (if any)
+  const inFlightBookings = userBookings
+    .filter(b => b.status !== 'completed' && b.status !== 'cancelled')
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+  // 3️⃣ Get latest completed booking for this customer (if any)
+  const completedBookings = userBookings
     .filter(b => b.status === 'completed')
     .sort(
       (a, b) =>
-        (new Date(b.completedAt ?? b.createdAt).getTime()) -
-        (new Date(a.completedAt ?? a.createdAt).getTime())
-    )[0];
+        new Date(b.completedAt ?? b.createdAt).getTime() -
+        new Date(a.createdAt).getTime()
+    );
 
-  return completed ?? null;
+  const latestInFlight = inFlightBookings[0];
+  const latestCompleted = completedBookings[0];
+
+  // 4️⃣ If both exist, prioritize the newer one so completed jobs aren't overridden by older seed/demo jobs
+  if (latestInFlight && latestCompleted) {
+    const inFlightTime = new Date(latestInFlight.createdAt).getTime();
+    const completedTime = new Date(latestCompleted.createdAt).getTime();
+    if (completedTime >= inFlightTime) {
+      return latestCompleted;
+    }
+    return latestInFlight;
+  }
+
+  return latestInFlight ?? latestCompleted ?? null;
 }
   const [searchQuery, setSearchQuery] = useState('');
   const [bookingModalService, setBookingModalService] = useState<ServiceItem | null>(null);
@@ -57,6 +73,28 @@ function getDisplayBooking(bookings: Booking[]): Booking | null {
   const [isBookingSuccess, setIsBookingSuccess] = useState(false);
   const [showSosModal, setShowSosModal] = useState(false);
   const [showInvoiceModal, setShowInvoiceModal] = useState<Booking | null>(null);
+  const [showGrievanceModal, setShowGrievanceModal] = useState(false);
+  const [grievanceCategory, setGrievanceCategory] = useState<'pricing' | 'quality' | 'safety' | 'conduct' | 'delay'>('quality');
+  const [grievanceDescription, setGrievanceDescription] = useState('');
+  const [grievanceSuccess, setGrievanceSuccess] = useState(false);
+
+  const handleCreateGrievance = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!grievanceDescription.trim()) return;
+    demoStore.createGrievance(
+      grievanceCategory,
+      grievanceDescription,
+      activeBooking?.id || 'book-general',
+      profile?.fullName || 'Priya Sharma',
+      activeBooking?.providerName || 'Assigned Technician'
+    );
+    setGrievanceSuccess(true);
+    setTimeout(() => {
+      setGrievanceSuccess(false);
+      setShowGrievanceModal(false);
+      setGrievanceDescription('');
+    }, 1800);
+  };
 
   useEffect(() => {
     const storeUnsubscribe = demoStore.subscribe(() => {
@@ -70,12 +108,12 @@ function getDisplayBooking(bookings: Booking[]): Booking | null {
 
   const t = translations[state.language] || translations.en;
 
-  // Active in-flight booking (for tracker)
-  const activeBooking = getDisplayBooking(state.bookings);
+  // Active in-flight or completed booking (for tracker)
+  const currentCustomerId = profile?.uid || 'cust-priya';
+  const activeBooking = getDisplayBooking(state.bookings, currentCustomerId);
 
-  // Auto-open invoice modal for completed bookings is handled via derived state below – no effect needed
-  // Derived invoice booking: either manually opened or auto for completed
-  const invoiceBooking = showInvoiceModal ?? (activeBooking?.status === 'completed' ? activeBooking : null);
+  // Digital Invoice display: controlled strictly by showInvoiceModal state
+  const invoiceBooking = showInvoiceModal;
 
   // Filtered services
   const filteredServices = state.services.filter(s => {
@@ -261,6 +299,15 @@ function getDisplayBooking(bookings: Booking[]): Booking | null {
               >
                 <Receipt className="w-4 h-4" />
                 <span>Invoice</span>
+              </button>
+
+              {/* Raise Grievance */}
+              <button
+                onClick={() => setShowGrievanceModal(true)}
+                className="bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-200 font-semibold px-3 py-2 rounded-2xl text-xs flex items-center gap-1.5 transition-colors"
+              >
+                <HeartHandshake className="w-4 h-4 text-amber-700" />
+                <span>Raise Issue</span>
               </button>
             </div>
           </div>
@@ -610,6 +657,77 @@ function getDisplayBooking(bookings: Booking[]): Booking | null {
             >
               Close Invoice
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* 10. Customer Grievance Modal */}
+      {showGrievanceModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-neutral-200 text-neutral-900 space-y-4">
+            <div className="flex items-center justify-between border-b border-neutral-200 pb-3">
+              <div>
+                <h3 className="font-bold text-neutral-900 text-base">Raise Statutory Grievance</h3>
+                <span className="text-xs text-neutral-500">Guaranteed 48-Hour SLA Redressal</span>
+              </div>
+              <button 
+                onClick={() => setShowGrievanceModal(false)}
+                className="text-neutral-400 hover:text-neutral-700 text-sm font-bold"
+              >
+                ✕
+              </button>
+            </div>
+
+            {grievanceSuccess ? (
+              <div className="bg-emerald-600 text-white p-4 rounded-2xl text-center font-bold text-xs space-y-1 animate-pulse">
+                ✓ Grievance Filed & Logged in Cooperative SLA Ledger!
+              </div>
+            ) : (
+              <form onSubmit={handleCreateGrievance} className="space-y-3 text-xs">
+                <div>
+                  <label className="font-semibold text-neutral-700 block mb-1">Issue Category:</label>
+                  <select
+                    value={grievanceCategory}
+                    onChange={(e) => setGrievanceCategory(e.target.value as 'pricing' | 'quality' | 'safety' | 'conduct' | 'delay')}
+                    className="w-full p-3 rounded-xl border border-neutral-200 bg-neutral-50 font-medium outline-none focus:ring-2 focus:ring-[#0D5C3A]"
+                  >
+                    <option value="quality">Quality of Work</option>
+                    <option value="pricing">Pricing / Billing Concern</option>
+                    <option value="conduct">Member Conduct</option>
+                    <option value="delay">Service Delay</option>
+                    <option value="safety">Safety / Protocol</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="font-semibold text-neutral-700 block mb-1">Description / Details:</label>
+                  <textarea
+                    required
+                    rows={3}
+                    value={grievanceDescription}
+                    onChange={(e) => setGrievanceDescription(e.target.value)}
+                    placeholder="Describe the issue experienced during service delivery..."
+                    className="w-full p-3 rounded-xl border border-neutral-200 bg-neutral-50 font-medium outline-none focus:ring-2 focus:ring-[#0D5C3A]"
+                  />
+                </div>
+
+                <div className="flex items-center gap-2 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowGrievanceModal(false)}
+                    className="w-1/3 py-2.5 rounded-xl border border-neutral-300 font-semibold text-neutral-700 hover:bg-neutral-100"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="w-2/3 py-2.5 rounded-xl bg-[#0D5C3A] text-white font-bold hover:bg-[#09442A] shadow-md"
+                  >
+                    Submit Grievance Ticket
+                  </button>
+                </div>
+              </form>
+            )}
           </div>
         </div>
       )}

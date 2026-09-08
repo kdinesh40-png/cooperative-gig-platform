@@ -1,35 +1,80 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    
-    // User profile documents
+
+    function isAuth() {
+      return request.auth != null;
+    }
+
+    function getUserRole() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role;
+    }
+
+    function isCoopAdmin() {
+      return isAuth() && getUserRole() == 'coop_admin';
+    }
+
+    function isMinistryAdmin() {
+      return isAuth() && getUserRole() == 'ministry_admin';
+    }
+
+    // 1. User profiles
     match /users/{userId} {
-      allow read: if request.auth != null;
-      allow create: if request.auth != null && request.auth.uid == userId;
-      allow update: if request.auth != null && request.auth.uid == userId;
-      allow delete: if false; // User document deletion disabled
+      allow read: if isAuth();
+      allow create: if isAuth() && request.auth.uid == userId;
+      // Prevent client-side self-escalation of role field during profile update
+      allow update: if isAuth() && request.auth.uid == userId &&
+        (!('role' in request.resource.data) || request.resource.data.role == resource.data.role || isCoopAdmin());
+      allow delete: if isCoopAdmin();
     }
 
-    // Provider profiles
+    // 2. Cooperative settings
+    match /settings/{settingId} {
+      allow read: if isAuth();
+      allow write: if isCoopAdmin();
+    }
+
+    // 3. Provider profiles
     match /providers/{providerId} {
-      allow read: if request.auth != null;
-      allow write: if request.auth != null && (
-        request.auth.uid == providerId ||
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'coop_admin'
-      );
+      allow read: if isAuth();
+      allow create: if isAuth() && (request.auth.uid == providerId || isCoopAdmin());
+      allow update: if isAuth() && (request.auth.uid == providerId || isCoopAdmin());
+      allow delete: if isCoopAdmin();
     }
 
-    // Bookings collection: authenticated users can read and manage bookings
+    // 4. Bookings collection
     match /bookings/{bookingId} {
-      allow read: if request.auth != null;
-      allow create: if request.auth != null;
-      allow update: if request.auth != null && (
+      allow read: if isAuth();
+      allow create: if isAuth();
+      allow update: if isAuth() && (
         resource.data.customerId == request.auth.uid ||
         resource.data.providerId == request.auth.uid ||
         resource.data.providerId == null ||
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'coop_admin'
+        isCoopAdmin()
       );
-      allow delete: if false;
+      allow delete: if isCoopAdmin();
+    }
+
+    // 5. Grievances collection
+    match /grievances/{grievanceId} {
+      allow read: if isAuth();
+      allow create: if isAuth();
+      allow update: if isCoopAdmin();
+      allow delete: if isCoopAdmin();
+    }
+
+    // 6. Governance proposals
+    match /proposals/{proposalId} {
+      allow read: if isAuth();
+      allow create, update: if isAuth();
+      allow delete: if isCoopAdmin();
+    }
+
+    // 7. SOS Alerts
+    match /sos_alerts/{alertId} {
+      allow read: if isAuth();
+      allow create, update: if isAuth();
+      allow delete: if isAuth();
     }
   }
 }

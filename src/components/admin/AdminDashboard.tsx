@@ -1,24 +1,19 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { 
-  Building2, 
-  Users, 
-  TrendingUp, 
-  ShieldCheck, 
-  FileCheck, 
-  Sliders, 
-  AlertCircle, 
-  CheckCircle2, 
-  XCircle, 
-  Download, 
-  FileText,
-  Clock,
-  Sparkles
+import {
+  Building2,
+  ShieldCheck,
+  FileCheck,
+  Sliders,
+  AlertCircle,
+  CheckCircle2,
+  Download,
+  Clock
 } from 'lucide-react';
 import { demoStore } from '@/lib/demo-store';
-import { formatINR } from '@/lib/fee-calculator';
 import { translations } from '@/lib/i18n';
+import { exportStatutoryAuditReport } from '@/lib/report-generator';
 
 export default function AdminDashboard() {
   const [state, setState] = useState(demoStore.getState());
@@ -37,14 +32,20 @@ export default function AdminDashboard() {
 
   const t = translations[state.language] || translations.en;
 
-  // Find pending provider for KYC demo (Ashok Mehra)
-  const pendingProvider = state.providers.find(p => p.verificationStatus === 'pending') || state.providers[2];
+  const pendingProviders = state.providers.filter(p => p.verificationStatus === 'pending');
   const activeGrievance = state.grievances.find(g => g.status !== 'resolved') || state.grievances[0];
 
-  const handleApproveKyc = (givePoliceBadge: boolean) => {
-    if (!pendingProvider) return;
-    demoStore.approveProviderKyc(pendingProvider.id, givePoliceBadge);
-    setKycSuccessMsg(`Approved ${pendingProvider.fullName} with ${givePoliceBadge ? 'Police Verification Badge' : 'Standard Badge'}.`);
+  const handleApproveKyc = (providerId: string, givePoliceBadge: boolean) => {
+    const targetProv = state.providers.find(p => p.id === providerId);
+    demoStore.approveProviderKyc(providerId, givePoliceBadge);
+    setKycSuccessMsg(`Approved ${targetProv?.fullName || 'Member'} with ${givePoliceBadge ? 'Police Verification Badge' : 'Standard Badge'}.`);
+    setTimeout(() => setKycSuccessMsg(''), 4000);
+  };
+
+  const handleRejectKyc = (providerId: string) => {
+    const targetProv = state.providers.find(p => p.id === providerId);
+    demoStore.rejectProviderKyc(providerId);
+    setKycSuccessMsg(`Rejected application for ${targetProv?.fullName || 'Member'}.`);
     setTimeout(() => setKycSuccessMsg(''), 4000);
   };
 
@@ -54,16 +55,48 @@ export default function AdminDashboard() {
     setTimeout(() => setFeeSaveSuccess(false), 3000);
   };
 
-  const handleResolveGrievance = () => {
-    if (!activeGrievance) return;
-    demoStore.resolveGrievance(activeGrievance.id);
-    setGrievanceSuccessMsg(`Grievance ${activeGrievance.ticketReference} resolved within 48h statutory SLA.`);
+  const handleResolveGrievance = (grievanceId?: string) => {
+    const target = grievanceId ? state.grievances.find(g => g.id === grievanceId) : activeGrievance;
+    if (!target) return;
+    demoStore.resolveGrievance(target.id);
+    setGrievanceSuccessMsg(`Grievance ${target.ticketReference} resolved within 48h statutory SLA.`);
     setTimeout(() => setGrievanceSuccessMsg(''), 4000);
+  };
+
+  const handleDismissSos = () => {
+    demoStore.dismissSosAlert();
   };
 
   return (
     <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6 space-y-7 pb-28">
-      
+
+      {/* Active SOS Emergency Alert Banner */}
+      {state.activeSosAlert && (
+        <div className="bg-red-600 text-white rounded-3xl p-5 shadow-xl flex flex-wrap items-center justify-between gap-4 animate-pulse">
+          <div className="flex items-center gap-3">
+            <AlertCircle className="w-8 h-8 text-yellow-300 shrink-0" />
+            <div>
+              <span className="bg-white text-red-700 text-[10px] font-black px-2.5 py-0.5 rounded-full uppercase tracking-wider">
+                Emergency SOS Broadcast
+              </span>
+              <h3 className="font-extrabold text-base mt-1">
+                SOS Alert Active for Customer {state.activeSosAlert.customerName}
+              </h3>
+              <p className="text-xs text-red-100">
+                Location: {state.activeSosAlert.location} • Triggered at: {state.activeSosAlert.timestamp}
+              </p>
+            </div>
+          </div>
+
+          <button
+            onClick={handleDismissSos}
+            className="bg-white hover:bg-neutral-100 text-red-700 font-bold text-xs px-4 py-2.5 rounded-2xl shadow-md transition-all whitespace-nowrap"
+          >
+            Dispatch Help & Dismiss SOS Alert
+          </button>
+        </div>
+      )}
+
       {/* 1. Header */}
       <header className="flex flex-wrap items-center justify-between gap-4 bg-white rounded-3xl p-6 shadow-sm border border-neutral-200">
         <div className="flex items-center gap-4">
@@ -85,12 +118,12 @@ export default function AdminDashboard() {
           </div>
         </div>
 
-        <button 
-          onClick={() => alert("Statutory Ministry Audit Log Exported as PDF/CSV")}
+        <button
+          onClick={exportStatutoryAuditReport}
           className="bg-neutral-900 hover:bg-black text-white font-semibold text-xs px-4 py-2.5 rounded-xl shadow-sm flex items-center gap-2 transition-all"
         >
           <Download className="w-4 h-4" />
-          <span>Export Statutory Audit Report</span>
+          <span>Export Statutory Audit Report (CSV)</span>
         </button>
       </header>
 
@@ -129,11 +162,12 @@ export default function AdminDashboard() {
           <div className="flex items-center gap-2">
             <FileCheck className="w-5 h-5 text-blue-600" />
             <h2 className="text-base font-bold text-neutral-900">
-              {t.verifyKYC} (Onboarding Review)
+              {t.verifyKYC} (onboarding Review)
+
             </h2>
           </div>
           <span className="text-xs font-semibold bg-amber-50 text-amber-800 px-3 py-1 rounded-full border border-amber-200">
-            1 Application Awaiting Review
+            {state.providers.filter(p => p.verificationStatus === 'pending').length} Application{state.providers.filter(p => p.verificationStatus === 'pending').length !== 1 ? 's' : ''} Awaiting Review
           </span>
         </div>
 
@@ -144,60 +178,71 @@ export default function AdminDashboard() {
           </div>
         )}
 
-        {pendingProvider && pendingProvider.verificationStatus === 'pending' ? (
-          <div className="bg-neutral-50 rounded-2xl p-5 border border-neutral-200 space-y-4">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <h3 className="font-bold text-neutral-900 text-sm">
-                  {pendingProvider.fullName} — {pendingProvider.trade}
-                </h3>
-                <p className="text-xs text-neutral-500">
-                  Phone: {pendingProvider.phone} • Experience: {pendingProvider.experienceYears} Years
-                </p>
+        {pendingProviders.length > 0 ? (
+          <div className="space-y-4">
+            {pendingProviders.map((provider) => (
+              <div key={provider.id} className="bg-neutral-50 rounded-2xl p-5 border border-neutral-200 space-y-4">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <h3 className="font-bold text-neutral-900 text-sm">
+                      {provider.fullName} — {provider.trade}
+                    </h3>
+                    <p className="text-xs text-neutral-500">
+                      Phone: {provider.phone} • Experience: {provider.experienceYears} Years
+                    </p>
+                  </div>
+                  <span className="bg-amber-100 text-amber-800 text-[11px] font-bold px-2.5 py-1 rounded-lg">
+                    Status: Pending Verification
+                  </span>
+                </div>
+
+                {/* Document Inspection Strip */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+                  <div className="bg-white p-3 rounded-xl border border-neutral-200 space-y-1">
+                    <span className="font-semibold text-neutral-700 block">Identity Document</span>
+                    <span className="text-neutral-900 font-mono">Aadhaar: {provider.idProofNumber}</span>
+                    <p className="text-[10px] text-emerald-700 font-semibold">✓ DigiLocker Verified</p>
+                  </div>
+
+                  <div className="bg-white p-3 rounded-xl border border-neutral-200 space-y-1">
+                    <span className="font-semibold text-neutral-700 block">Trade Qualification</span>
+                    <span className="text-neutral-900">{provider.trainingInstitute}</span>
+                    <p className="text-[10px] text-blue-700 font-semibold">✓ Apprenticeship Certified</p>
+                  </div>
+
+                  <div className="bg-white p-3 rounded-xl border border-neutral-200 space-y-1">
+                    <span className="font-semibold text-neutral-700 block">Social Security / e-Shram</span>
+                    <span className="text-neutral-900 font-mono">{provider.eshramUan}</span>
+                    <p className="text-[10px] text-purple-700 font-semibold">✓ Linked to PMSYM</p>
+                  </div>
+                </div>
+
+                {/* Verification Actions */}
+                <div className="flex flex-wrap items-center gap-3 pt-2">
+                  <button
+                    onClick={() => handleApproveKyc(provider.id, true)}
+                    className="bg-[#0D5C3A] hover:bg-[#09442A] text-white font-bold text-xs px-4 py-2.5 rounded-xl shadow-sm flex items-center gap-1.5 transition-all"
+                  >
+                    <ShieldCheck className="w-4 h-4" />
+                    <span>Approve & Grant Police Verification Badge</span>
+                  </button>
+
+                  <button
+                    onClick={() => handleApproveKyc(provider.id, false)}
+                    className="bg-neutral-800 hover:bg-neutral-900 text-white font-semibold text-xs px-4 py-2.5 rounded-xl transition-all"
+                  >
+                    Approve (Standard Member)
+                  </button>
+
+                  <button
+                    onClick={() => handleRejectKyc(provider.id)}
+                    className="bg-red-50 hover:bg-red-100 text-red-700 font-semibold text-xs px-4 py-2.5 rounded-xl border border-red-200 transition-all"
+                  >
+                    Reject Application
+                  </button>
+                </div>
               </div>
-              <span className="bg-amber-100 text-amber-800 text-[11px] font-bold px-2.5 py-1 rounded-lg">
-                Status: Pending Verification
-              </span>
-            </div>
-
-            {/* Document Inspection Strip */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
-              <div className="bg-white p-3 rounded-xl border border-neutral-200 space-y-1">
-                <span className="font-semibold text-neutral-700 block">Identity Document</span>
-                <span className="text-neutral-900 font-mono">Aadhaar: {pendingProvider.idProofNumber}</span>
-                <p className="text-[10px] text-emerald-700 font-semibold">✓ DigiLocker Verified</p>
-              </div>
-
-              <div className="bg-white p-3 rounded-xl border border-neutral-200 space-y-1">
-                <span className="font-semibold text-neutral-700 block">Trade Qualification</span>
-                <span className="text-neutral-900">{pendingProvider.trainingInstitute}</span>
-                <p className="text-[10px] text-blue-700 font-semibold">✓ Apprenticeship Certified</p>
-              </div>
-
-              <div className="bg-white p-3 rounded-xl border border-neutral-200 space-y-1">
-                <span className="font-semibold text-neutral-700 block">Social Security / e-Shram</span>
-                <span className="text-neutral-900 font-mono">{pendingProvider.eshramUan}</span>
-                <p className="text-[10px] text-purple-700 font-semibold">✓ Linked to PMSYM</p>
-              </div>
-            </div>
-
-            {/* Verification Actions */}
-            <div className="flex flex-wrap items-center gap-3 pt-2">
-              <button
-                onClick={() => handleApproveKyc(true)}
-                className="bg-[#0D5C3A] hover:bg-[#09442A] text-white font-bold text-xs px-4 py-2.5 rounded-xl shadow-sm flex items-center gap-1.5 transition-all"
-              >
-                <ShieldCheck className="w-4 h-4" />
-                <span>Approve & Grant Police Verification Badge</span>
-              </button>
-
-              <button
-                onClick={() => handleApproveKyc(false)}
-                className="bg-neutral-800 hover:bg-neutral-900 text-white font-semibold text-xs px-4 py-2.5 rounded-xl transition-all"
-              >
-                Approve (Standard Member)
-              </button>
-            </div>
+            ))}
           </div>
         ) : (
           <div className="text-center py-6 text-xs text-neutral-500 bg-neutral-50 rounded-2xl">
@@ -242,7 +287,7 @@ export default function AdminDashboard() {
             </div>
           </div>
 
-          <input 
+          <input
             type="range"
             min="3.0"
             max="10.0"
@@ -312,7 +357,7 @@ export default function AdminDashboard() {
 
             <div className="pt-2 flex items-center gap-3">
               <button
-                onClick={handleResolveGrievance}
+                onClick={() => handleResolveGrievance(activeGrievance?.id)}
                 className="bg-[#0D5C3A] hover:bg-[#09442A] text-white font-bold text-xs px-4 py-2.5 rounded-xl shadow-sm transition-all"
               >
                 Resolve & Release Escrow Settlement

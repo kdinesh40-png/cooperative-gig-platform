@@ -1,12 +1,25 @@
 'use client';
 
-import React from 'react';
-import { Landmark, ShieldCheck, Award, Map, PieChart, Users, CheckCircle2 } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Landmark } from 'lucide-react';
 import { formatINR } from '@/lib/fee-calculator';
+import { demoStore } from '@/lib/demo-store';
 
 export default function MinistryDashboard() {
+  const [state, setState] = useState(demoStore.getState());
+
+  useEffect(() => {
+    const unsubscribe = demoStore.subscribe(() => {
+      setState(demoStore.getState());
+    });
+    return unsubscribe;
+  }, []);
+
+  const retentionPct = (100 - state.cooperativeFeePercent - state.welfareFundPercent).toFixed(1) + '%';
+  const approvedProviders = state.providers.filter(p => p.verificationStatus === 'approved').length;
+
   const statePilots = [
-    { state: 'Delhi NCT', society: 'Sahkar Urban Services Multi-State Co-op', members: 84, gmv: 148600, retentionRate: '93.8%', shgPct: '42%' },
+    { state: 'Delhi NCT', society: 'Sahkar Urban Services Multi-State Co-op', members: approvedProviders || 84, gmv: 148600, retentionRate: retentionPct, shgPct: '42%' },
     { state: 'Maharashtra', society: 'Maharashtra Shramik Seva Sahakari Sanstha', members: 162, gmv: 312000, retentionRate: '94.2%', shgPct: '48%' },
     { state: 'Karnataka', society: 'Karnataka Rajya Karmika Sahakara Mahamandala', members: 110, gmv: 219500, retentionRate: '93.5%', shgPct: '39%' },
   ];

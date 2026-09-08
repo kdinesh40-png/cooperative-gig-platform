@@ -42,7 +42,7 @@ export default function SOSModal({ isOpen, onClose, bookingReference = 'COOP-202
           <span>Trust & Safety Emergency SOS</span>
         </h3>
         <p className="text-sm text-neutral-600 mt-1">
-          Cooperative Safety Protocol for Booking <strong>{bookingReference}</strong>
+          Cooperative Safety Protocol for <strong>{customerName}</strong> (Ref: {bookingReference})
         </p>
 
         {alertSent ? (

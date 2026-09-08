@@ -1,11 +1,11 @@
-import { 
-  collection, 
-  doc, 
-  setDoc, 
-  updateDoc, 
-  onSnapshot, 
+import {
+  collection,
+  doc,
+  setDoc,
+  updateDoc,
+  onSnapshot,
   getDocs,
-  type Unsubscribe 
+  type Unsubscribe
 } from 'firebase/firestore';
 import { getFirebaseDb, isFirebaseConfigured } from './firebase';
 import { Booking, BookingStatus } from '@/types/cooperative';
@@ -47,7 +47,7 @@ export function subscribeToBookings(
   const database = getFirebaseDb();
   if (!isFirebaseConfigured() || !database) {
     if (onError) onError(new Error('Firebase is not configured or database is unavailable'));
-    return () => {};
+    return () => { };
   }
 
   try {
@@ -83,7 +83,7 @@ export function subscribeToBookings(
   } catch (error: unknown) {
     console.error('[Firestore] Failed to attach onSnapshot listener:', error);
     if (onError && error instanceof Error) onError(error);
-    return () => {};
+    return () => { };
   }
 }
 
@@ -132,7 +132,7 @@ export async function createFirestoreBooking(booking: Booking): Promise<void> {
  * This triggers onSnapshot across all connected client browser tabs.
  */
 export async function updateFirestoreBookingStatus(
-  bookingId: string, 
+  bookingId: string,
   status: BookingStatus,
   extraFields: Partial<Booking> = {}
 ): Promise<void> {

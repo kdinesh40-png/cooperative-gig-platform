@@ -1,24 +1,42 @@
 // Interactive Demo State Store with Real-Time Reactivity
 // Enables seamless cross-role testing for SIH 2026 judging
 
-import { 
-  UserRole, 
-  LanguageCode, 
-  ServiceCategory, 
-  ServiceItem, 
-  ProviderProfile, 
-  Booking, 
-  GovernanceProposal, 
-  Grievance 
+import {
+  UserRole,
+  LanguageCode,
+  ServiceCategory,
+  ServiceItem,
+  ProviderProfile,
+  Booking,
+  GovernanceProposal,
+  Grievance
 } from '@/types/cooperative';
 import { calculateFeeSplit } from './fee-calculator';
 import { isFirebaseConfigured } from './firebase';
-import { 
-  subscribeToBookings, 
-  createFirestoreBooking, 
-  updateFirestoreBookingStatus, 
-  seedFirestoreInitialBookingsIfEmpty 
+import {
+  subscribeToBookings,
+  createFirestoreBooking,
+  updateFirestoreBookingStatus,
+  seedFirestoreInitialBookingsIfEmpty
 } from './firestore-bookings';
+import {
+  subscribeToProviders,
+  updateFirestoreProviderKyc,
+  seedFirestoreInitialProvidersIfEmpty,
+  subscribeToCooperativeSettings,
+  updateFirestoreFeeSlab,
+  seedFirestoreInitialSettingsIfEmpty,
+  subscribeToGrievances,
+  updateFirestoreGrievanceStatus,
+  createFirestoreGrievance,
+  seedFirestoreInitialGrievancesIfEmpty,
+  subscribeToProposals,
+  voteFirestoreProposal,
+  seedFirestoreInitialProposalsIfEmpty,
+  subscribeToSosAlerts,
+  createFirestoreSosAlert,
+  resolveFirestoreSosAlert
+} from './firestore-secondary';
 
 export interface AppState {
   currentRole: UserRole;
@@ -335,7 +353,7 @@ function notify() {
 }
 
 let isFirestoreSubscribed = false;
-let firestoreUnsubscribe: (() => void) | null = null;
+let secondaryUnsubscribers: (() => void)[] = [];
 let firestoreSyncStatus: 'connecting' | 'connected' | 'error' = 'connecting';
 let firestoreSyncError: string | null = null;
 
@@ -351,31 +369,25 @@ export function initFirestoreSync() {
   firestoreSyncStatus = 'connecting';
   firestoreSyncError = null;
 
-  // Seed initial booking if collection is empty in Firestore
-  seedFirestoreInitialBookingsIfEmpty(initialBookings).catch((err) => {
-    console.warn('[demoStore] Seed error:', err);
-  });
+  // Seed initial collections if empty in Firestore
+  seedFirestoreInitialBookingsIfEmpty(initialBookings).catch(() => {});
+  seedFirestoreInitialProvidersIfEmpty(initialProviders).catch(() => {});
+  seedFirestoreInitialSettingsIfEmpty(5.0).catch(() => {});
+  seedFirestoreInitialGrievancesIfEmpty(initialGrievances).catch(() => {});
+  seedFirestoreInitialProposalsIfEmpty(initialProposals).catch(() => {});
 
-  // Singleton Real-time Firestore synchronization via onSnapshot()
-  firestoreUnsubscribe = subscribeToBookings(
+  // 1. Bookings listener
+  const unsubBookings = subscribeToBookings(
     (firestoreBookings) => {
       firestoreSyncStatus = 'connected';
       firestoreSyncError = null;
 
       if (Array.isArray(firestoreBookings)) {
         if (firestoreBookings.length === 0) {
-          // If Firestore is empty, preserve initial demo bookings and trigger seed write
-          state = {
-            ...state,
-            bookings: initialBookings
-          };
+          state = { ...state, bookings: initialBookings };
           seedFirestoreInitialBookingsIfEmpty(initialBookings).catch(() => {});
         } else {
-          // Merge or replace with real-time Firestore bookings
-          state = {
-            ...state,
-            bookings: firestoreBookings
-          };
+          state = { ...state, bookings: firestoreBookings };
         }
         notify();
       }
@@ -387,6 +399,50 @@ export function initFirestoreSync() {
       notify();
     }
   );
+  secondaryUnsubscribers.push(unsubBookings);
+
+  // 2. Providers listener
+  const unsubProviders = subscribeToProviders((firestoreProviders) => {
+    if (Array.isArray(firestoreProviders) && firestoreProviders.length > 0) {
+      state = { ...state, providers: firestoreProviders };
+      notify();
+    }
+  });
+  secondaryUnsubscribers.push(unsubProviders);
+
+  // 3. Settings listener
+  const unsubSettings = subscribeToCooperativeSettings((settings) => {
+    if (settings && typeof settings.cooperativeFeePercent === 'number') {
+      state = { ...state, cooperativeFeePercent: settings.cooperativeFeePercent };
+      notify();
+    }
+  });
+  secondaryUnsubscribers.push(unsubSettings);
+
+  // 4. Grievances listener
+  const unsubGrievances = subscribeToGrievances((firestoreGrievances) => {
+    if (Array.isArray(firestoreGrievances) && firestoreGrievances.length > 0) {
+      state = { ...state, grievances: firestoreGrievances };
+      notify();
+    }
+  });
+  secondaryUnsubscribers.push(unsubGrievances);
+
+  // 5. Proposals listener
+  const unsubProposals = subscribeToProposals((firestoreProposals) => {
+    if (Array.isArray(firestoreProposals) && firestoreProposals.length > 0) {
+      state = { ...state, proposals: firestoreProposals };
+      notify();
+    }
+  });
+  secondaryUnsubscribers.push(unsubProposals);
+
+  // 6. SOS Alerts listener
+  const unsubSos = subscribeToSosAlerts((sosAlert) => {
+    state = { ...state, activeSosAlert: sosAlert };
+    notify();
+  });
+  secondaryUnsubscribers.push(unsubSos);
 }
 
 // Auto-initialize real-time listener in browser
@@ -396,7 +452,7 @@ if (typeof window !== 'undefined') {
 
 export const demoStore = {
   getState: () => state,
-  
+
   isFirebaseLive: () => isFirebaseConfigured(),
 
   getSyncStatus: () => ({
@@ -405,11 +461,9 @@ export const demoStore = {
   }),
 
   unsubscribeFirestore: () => {
-    if (firestoreUnsubscribe) {
-      firestoreUnsubscribe();
-      firestoreUnsubscribe = null;
-      isFirestoreSubscribed = false;
-    }
+    secondaryUnsubscribers.forEach(unsub => unsub());
+    secondaryUnsubscribers = [];
+    isFirestoreSubscribed = false;
   },
 
   setBookingsFromFirestore: (newBookings: Booking[]) => {
@@ -451,7 +505,7 @@ export const demoStore = {
   toggleProviderAvailability: (providerId: string = 'prov-ramesh') => {
     state = {
       ...state,
-      providers: state.providers.map(p => 
+      providers: state.providers.map(p =>
         p.id === providerId ? { ...p, isAvailable: !p.isAvailable } : p
       )
     };
@@ -459,14 +513,14 @@ export const demoStore = {
   },
 
   bookService: (
-    service: ServiceItem, 
-    address: string, 
+    service: ServiceItem,
+    address: string,
     instructions?: string,
     customerProfile?: { customerId?: string; customerName?: string; customerPhone?: string }
   ) => {
     const split = calculateFeeSplit(service.basePrice, state.cooperativeFeePercent, state.welfareFundPercent);
     const matchedProvider = state.providers.find(p => p.isAvailable && p.verificationStatus === 'approved') || state.providers[0];
-    
+
     const newBooking: Booking = {
       id: `book-${Date.now()}`,
       bookingReference: `COOP-2026-DEL-${Math.floor(1000 + Math.random() * 9000)}`,
@@ -513,13 +567,13 @@ export const demoStore = {
 
   updateBookingStatus: (bookingId: string, newStatus: Booking['status']) => {
     const completedAt = newStatus === 'completed' ? new Date().toISOString() : undefined;
-    
+
     // Optimistic local state update
     state = {
       ...state,
-      bookings: state.bookings.map(b => 
-        b.id === bookingId ? { 
-          ...b, 
+      bookings: state.bookings.map(b =>
+        b.id === bookingId ? {
+          ...b,
           status: newStatus,
           completedAt: completedAt || b.completedAt
         } : b
@@ -534,28 +588,37 @@ export const demoStore = {
   },
 
   castVote: (proposalId: string, optionId: string) => {
+    let updatedProp: GovernanceProposal | null = null;
     state = {
       ...state,
       proposals: state.proposals.map(p => {
         if (p.id !== proposalId) return p;
-        const updatedOptions = p.options.map(opt => 
+        if (p.userVotedOptionId) return p;
+        const updatedOptions = p.options.map(opt =>
           opt.id === optionId ? { ...opt, voteCount: opt.voteCount + 1 } : opt
         );
-        return {
+        updatedProp = {
           ...p,
           options: updatedOptions,
           totalVotes: p.totalVotes + 1,
           userVotedOptionId: optionId
         };
+        return updatedProp;
       })
     };
     notify();
+
+    if (updatedProp) {
+      voteFirestoreProposal(proposalId, updatedProp).catch((err) => {
+        console.error('[demoStore] Error persisting vote:', err);
+      });
+    }
   },
 
   approveProviderKyc: (providerId: string, givePoliceBadge: boolean = true) => {
     state = {
       ...state,
-      providers: state.providers.map(p => 
+      providers: state.providers.map(p =>
         p.id === providerId ? {
           ...p,
           verificationStatus: 'approved',
@@ -564,6 +627,28 @@ export const demoStore = {
       )
     };
     notify();
+
+    updateFirestoreProviderKyc(providerId, 'approved', givePoliceBadge).catch((err) => {
+      console.error('[demoStore] Error persisting provider KYC:', err);
+    });
+  },
+
+  rejectProviderKyc: (providerId: string) => {
+    state = {
+      ...state,
+      providers: state.providers.map(p =>
+        p.id === providerId ? {
+          ...p,
+          verificationStatus: 'rejected',
+          policeVerificationBadge: false
+        } : p
+      )
+    };
+    notify();
+
+    updateFirestoreProviderKyc(providerId, 'rejected', false).catch((err) => {
+      console.error('[demoStore] Error persisting provider KYC rejection:', err);
+    });
   },
 
   updateFeeSlab: (newPercent: number) => {
@@ -572,34 +657,86 @@ export const demoStore = {
       cooperativeFeePercent: newPercent
     };
     notify();
+
+    updateFirestoreFeeSlab(newPercent).catch((err) => {
+      console.error('[demoStore] Error persisting fee slab:', err);
+    });
   },
 
-  resolveGrievance: (grievanceId: string) => {
+  createGrievance: (
+    category: Grievance['category'],
+    description: string,
+    bookingId?: string,
+    customerName?: string,
+    providerName?: string
+  ) => {
+    const newGrievance: Grievance = {
+      id: `grv-${Date.now()}`,
+      ticketReference: `GRV-2026-${Math.floor(100 + Math.random() * 900)}`,
+      bookingId: bookingId || 'book-general',
+      customerName: customerName || 'Priya Sharma',
+      providerName: providerName || 'Assigned Technician',
+      category,
+      description,
+      status: 'investigating',
+      resolutionDeadline: '48h remaining (SLA: 48h)',
+      createdAt: new Date().toLocaleDateString('en-IN', { hour: '2-digit', minute: '2-digit' })
+    };
+
     state = {
       ...state,
-      grievances: state.grievances.map(g => 
-        g.id === grievanceId ? { ...g, status: 'resolved', resolutionNotes: 'Escrow released upon mutual customer satisfaction.' } : g
+      grievances: [newGrievance, ...state.grievances]
+    };
+    notify();
+
+    createFirestoreGrievance(newGrievance).catch((err) => {
+      console.error('[demoStore] Error creating grievance in Firestore:', err);
+    });
+
+    return newGrievance;
+  },
+
+  resolveGrievance: (grievanceId: string, resolutionNotes?: string) => {
+    const notes = resolutionNotes || 'Escrow released upon mutual customer satisfaction.';
+    state = {
+      ...state,
+      grievances: state.grievances.map(g =>
+        g.id === grievanceId ? { ...g, status: 'resolved', resolutionNotes: notes } : g
       )
     };
     notify();
+
+    updateFirestoreGrievanceStatus(grievanceId, 'resolved', notes).catch((err) => {
+      console.error('[demoStore] Error persisting grievance status:', err);
+    });
   },
 
   triggerEmergencySos: (bookingId: string) => {
     const booking = state.bookings.find(b => b.id === bookingId);
+    const alertRecord = {
+      bookingId,
+      customerName: booking?.customerName || 'Priya Sharma',
+      location: booking?.customerAddress || 'Indiranagar / Mayur Vihar',
+      timestamp: new Date().toLocaleTimeString('en-IN')
+    };
     state = {
       ...state,
-      activeSosAlert: {
-        bookingId,
-        customerName: booking?.customerName || 'Priya Sharma',
-        location: booking?.customerAddress || 'Indiranagar / Mayur Vihar',
-        timestamp: new Date().toLocaleTimeString('en-IN')
-      }
+      activeSosAlert: alertRecord
     };
     notify();
+
+    createFirestoreSosAlert(alertRecord).catch((err) => {
+      console.error('[demoStore] Error creating SOS alert in Firestore:', err);
+    });
   },
 
   dismissSosAlert: () => {
+    const alertId = state.activeSosAlert?.bookingId;
     state = { ...state, activeSosAlert: null };
     notify();
+
+    resolveFirestoreSosAlert(alertId).catch((err) => {
+      console.error('[demoStore] Error resolving SOS alert in Firestore:', err);
+    });
   }
 };

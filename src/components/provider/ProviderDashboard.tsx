@@ -53,12 +53,27 @@ export default function ProviderDashboard() {
   const providerName = profile?.fullName || defaultProvider.fullName;
   const providerInitials = providerName.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase() || 'RK';
 
+  const currentProviderId = profile?.uid || defaultProvider.id;
+
   // Select active job (assigned to this provider or unassigned open booking)
   const activeJob = state.bookings.find(
-    b => (b.providerId === defaultProvider.id || b.providerId === profile?.uid || !b.providerId || b.customerId) && 
+    b => (b.providerId === currentProviderId || b.providerId === defaultProvider.id || !b.providerId) && 
          b.status !== 'completed' && 
          b.status !== 'cancelled'
-  ) || state.bookings[0];
+  );
+
+  const completedWorkerBookings = state.bookings.filter(
+    b => (b.providerId === currentProviderId || b.providerId === defaultProvider.id) && b.status === 'completed'
+  );
+
+  const dynamicCompletedGross = completedWorkerBookings.reduce((sum, b) => sum + b.grossAmount, 0);
+  const dynamicCompletedNet = completedWorkerBookings.reduce((sum, b) => sum + b.providerPayoutAmount, 0);
+  const dynamicCompletedCount = completedWorkerBookings.length;
+
+  const totalEarningsGross = provider.totalEarningsGross + dynamicCompletedGross;
+  const totalEarningsNet = provider.totalEarningsNet + dynamicCompletedNet;
+  const totalJobsCompleted = provider.totalJobsCompleted + dynamicCompletedCount;
+
   const activeProposal = state.proposals[0];
 
   const handleToggleAvailability = () => {
@@ -199,7 +214,7 @@ export default function ProviderDashboard() {
         {withdrawSuccess && (
           <div className="bg-emerald-500/20 border border-emerald-500 text-emerald-300 p-3 rounded-xl text-xs flex items-center gap-2">
             <CheckCircle className="w-4 h-4" />
-            <span>Withdrawal of {formatINR(provider.totalEarningsNet)} initiated via instant NPCI/UPI transfer!</span>
+            <span>Withdrawal of {formatINR(totalEarningsNet)} initiated via instant NPCI/UPI transfer!</span>
           </div>
         )}
 
@@ -207,31 +222,31 @@ export default function ProviderDashboard() {
           <div className="bg-white/5 p-4 rounded-2xl border border-white/10">
             <span className="text-[11px] text-neutral-400 block">{t.grossEarned}</span>
             <span className="text-xl sm:text-2xl font-black text-white mt-1 block">
-              {formatINR(provider.totalEarningsGross)}
+              {formatINR(totalEarningsGross)}
             </span>
-            <span className="text-[10px] text-neutral-400">178 Completed Jobs</span>
+            <span className="text-[10px] text-neutral-400">{totalJobsCompleted} Completed Jobs</span>
           </div>
 
           <div className="bg-white/5 p-4 rounded-2xl border border-white/10">
             <span className="text-[11px] text-neutral-400 block">{t.coopUpkeep}</span>
             <span className="text-xl sm:text-2xl font-black text-amber-400 mt-1 block">
-              {formatINR(provider.totalEarningsGross * 0.05)}
+              {formatINR(totalEarningsGross * (state.cooperativeFeePercent / 100))}
             </span>
-            <span className="text-[10px] text-neutral-400">Tech & Ops Only</span>
+            <span className="text-[10px] text-neutral-400">Tech & Ops ({state.cooperativeFeePercent}%)</span>
           </div>
 
           <div className="bg-white/5 p-4 rounded-2xl border border-white/10">
             <span className="text-[11px] text-neutral-400 block">{t.welfareFund}</span>
             <span className="text-xl sm:text-2xl font-black text-blue-400 mt-1 block">
-              {formatINR(provider.totalEarningsGross * 0.02)}
+              {formatINR(totalEarningsGross * 0.02)}
             </span>
-            <span className="text-[10px] text-neutral-400">Accident & Health Pool</span>
+            <span className="text-[10px] text-neutral-400">Accident Pool (2%)</span>
           </div>
 
           <div className="bg-emerald-950/60 p-4 rounded-2xl border border-emerald-500/30">
             <span className="text-[11px] text-emerald-300 block font-semibold">{t.netPayout}</span>
             <span className="text-xl sm:text-2xl font-black text-emerald-400 mt-1 block">
-              {formatINR(provider.totalEarningsNet)}
+              {formatINR(totalEarningsNet)}
             </span>
             <span className="text-[10px] text-emerald-300 font-semibold">+₹12,400 vs Urban Company</span>
           </div>
@@ -328,6 +343,69 @@ export default function ProviderDashboard() {
           </p>
         </section>
       )}
+
+      {/* Worker Completed Job History Table */}
+      <section className="bg-white rounded-3xl p-6 shadow-sm border border-neutral-200 space-y-4">
+        <div className="flex items-center justify-between pb-2 border-b border-neutral-100">
+          <div>
+            <h2 className="text-base font-bold text-neutral-900">
+              Completed Job History & Direct Payout Trail
+            </h2>
+            <p className="text-xs text-neutral-500">
+              Transparent breakdown of member earnings per completed job
+            </p>
+          </div>
+          <span className="text-xs font-semibold text-emerald-800 bg-emerald-50 px-3 py-1 rounded-full border border-emerald-200">
+            {completedWorkerBookings.length} Completed Job{completedWorkerBookings.length !== 1 ? 's' : ''}
+          </span>
+        </div>
+
+        {completedWorkerBookings.length > 0 ? (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs">
+              <thead className="bg-neutral-50 text-neutral-600 font-semibold border-b border-neutral-200">
+                <tr>
+                  <th className="p-3">Reference</th>
+                  <th className="p-3">Service & Customer</th>
+                  <th className="p-3">Scheduled / Date</th>
+                  <th className="p-3">Gross Fee</th>
+                  <th className="p-3">Co-op & Welfare</th>
+                  <th className="p-3">Your Net Direct Payout</th>
+                  <th className="p-3">Status</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-neutral-100 text-neutral-700">
+                {completedWorkerBookings.map((b) => (
+                  <tr key={b.id} className="hover:bg-neutral-50">
+                    <td className="p-3 font-mono font-bold text-neutral-900">{b.bookingReference}</td>
+                    <td className="p-3 font-medium">
+                      <span className="text-neutral-900 block font-semibold">{b.serviceName}</span>
+                      <span className="text-neutral-500 text-[11px]">{b.customerName}</span>
+                    </td>
+                    <td className="p-3 text-neutral-500">{b.scheduledAt}</td>
+                    <td className="p-3 font-bold">{formatINR(b.grossAmount)}</td>
+                    <td className="p-3 text-neutral-500">
+                      {formatINR(b.cooperativeFeeAmount + b.welfareFundAmount)} (7%)
+                    </td>
+                    <td className="p-3 text-[#0D5C3A] font-extrabold text-sm">
+                      {formatINR(b.providerPayoutAmount)}
+                    </td>
+                    <td className="p-3">
+                      <span className="bg-emerald-50 text-[#0D5C3A] border border-emerald-200 px-2 py-0.5 rounded-full text-[10px] font-bold">
+                        Disbursed via UPI
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <div className="text-center py-6 text-xs text-neutral-500 bg-neutral-50 rounded-2xl">
+            No completed jobs logged for this session yet. Complete an assigned service above to view real-time payout ledger entries.
+          </div>
+        )}
+      </section>
 
       {/* 4. "Member Voice" Democratic Governance & Voting Card */}
       <section className="bg-white rounded-3xl p-6 shadow-sm border border-neutral-200 space-y-4">
